@@ -67,11 +67,16 @@ class main:
             'port': int(dst[3]) if len(dst) > 3 else 143,
         }
         
-        # Made connections and authenticate
+        # Make connections and authenticate
         srcconn = imaplib.IMAP4(src['host'], src['port'])
         srcconn.login(src['user'], src['pass'])
+        srctype = self.__getServerType(srcconn)
+        print "Source server type is", srctype
+        
         dstconn = imaplib.IMAP4(dst['host'], dst['port'])
         dstconn.login(dst['user'], dst['pass'])
+        dsttype = self.__getServerType(dstconn)
+        print "Destination server type is", dsttype
 
         print "Source mailboxes:"
         srcfolders = self.__listMailboxes(srcconn)
@@ -83,14 +88,19 @@ class main:
 
         # Syncing every source folder
         for f in srcfolders:
-            print "Syncing", f['mailbox']
+            
+            # Translate folder name
+            srcfolder = f['mailbox']
+            dstfolder = self.__translateFolderName(f['mailbox'], srctype, dsttype)
+            
+            print "Syncing", srcfolder, 'into', dstfolder
             
             # Create dst mailbox when missing
-            dstconn.create(f['mailbox'])
+            dstconn.create(dstfolder)
             
             # Select source mailbox readonly
-            srcconn.select(f['mailbox'], True)
-            dstconn.select(f['mailbox'], False)
+            srcconn.select(srcfolder, True)
+            dstconn.select(dstfolder, False)
             
             # Fetch all destination messages imap IDS
             dstids = self.__listMessages(dstconn)
@@ -115,7 +125,7 @@ class main:
                     # Message not found, syncing it
                     print "Copying message", mid
                     mex = self.__getMessage(srcconn, sid)
-                    dstconn.append(f['mailbox'], None, None, mex)
+                    dstconn.append(dstfolder, None, None, mex)
                 else:
                     print "Skipping message", mid
 
@@ -175,6 +185,40 @@ class main:
         if res != 'OK':
             raise RuntimeError('Unvalid reply: ' + res)
         return data[0][1]
+
+    def __getServerType(self, conn):
+        """ Try to guess IMAP server type
+        @return One of: unknown, exchange, dovecot
+        """
+        regs = {
+            'exchange': re.compile('^.*Microsoft Exchange.*$', re.I),
+            'dovecot': re.compile('^.*imapfront.*$', re.I),
+        }
+        for r in regs.keys():
+            if regs[r].match(conn.welcome):
+                return r
+        return 'unknown'
+
+    def __translateFolderName(self, name, srcformat, dstformat):
+        """ Translates forlder name from src server format do dst server format """
+        
+        # 1. Transpose into dovecot format (use DOT as folder separator)
+        if srcformat == 'exchange':
+            name = name.replace('.', ' ').replace('/', '.')
+        elif srcformat == 'dovecot':
+            pass
+        else:
+            pass
+        
+        # 2. Transpose into output format
+        if dstformat == 'exchange':
+            name = name.replace('/', ' ').replace('.', '/')
+        elif dstformat == 'dovecot':
+            pass
+        else:
+            pass
+        
+        return name
 
 if __name__ == '__main__':
     app = main()
