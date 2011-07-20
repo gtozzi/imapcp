@@ -46,12 +46,20 @@ class main:
         # Read command line
         usage = "%prog <user>:<password>:<host>:<port> <user>:<password>:<host>:<port>"
         parser = OptionParser(usage=usage, version=self.NAME + ' ' + self.VERSION)
+        parser.add_option("-e", "--exclude", dest="exclude", action='append',
+            help="Exclude folders matching pattern (can be specified multiple times)")
 
         (options, args) = parser.parse_args()
         
+        # Parse exclude list
+        excludes = []
+        if options.exclude:
+            for e in options.exclude:
+                excludes.append(re.compile(e))
+        
         # Parse mandatory arguments
         if len(args) < 2:
-            parser.error("unvalid number of arguments")
+            parser.error("invalid number of arguments")
         src = args[0].split(':')
         src = {
             'user': src[0],
@@ -92,6 +100,16 @@ class main:
             # Translate folder name
             srcfolder = f['mailbox']
             dstfolder = self.__translateFolderName(f['mailbox'], srctype, dsttype)
+            
+            # Check for folder in exclusion list
+            skip = False
+            for e in excludes:
+                if e.match(srcfolder):
+                    skip = True
+                    break
+            if skip:
+                print "Skipping", srcfolder, "(excluded)"
+                continue
             
             print "Syncing", srcfolder, 'into', dstfolder
             
