@@ -36,7 +36,7 @@ from optparse import OptionParser
 class main:
     
     NAME = 'imapcp'
-    VERSION = '0.1'
+    VERSION = '0.2'
     
     def run(self):
         
@@ -99,7 +99,10 @@ class main:
             dstconn.create(dstfolder)
             
             # Select source mailbox readonly
-            srcconn.select(srcfolder, True)
+            (res, data) = srcconn.select(srcfolder, True)
+            if res == 'NO' and srctype == 'exchange' and 'special mailbox' in data[0]:
+                print "Skipping special Microsoft Exchange Mailbox", srcfolder
+                continue
             dstconn.select(dstfolder, False)
             
             # Fetch all destination messages imap IDS
