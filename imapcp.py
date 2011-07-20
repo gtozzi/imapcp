@@ -131,7 +131,7 @@ class main:
         (res, data) = conn.list()
         if res != 'OK':
             raise RuntimeError('Unvalid reply: ' + res)
-        list_re = re.compile(r'\((?P<flags>.*)\)\s+"(?P<delimiter>.*)"\s+"(?P<name>.*)"')
+        list_re = re.compile(r'\((?P<flags>.*)\)\s+"(?P<delimiter>.*)"\s+"?(?P<name>[^"]*)"?')
         folders = []
         for d in data:
             m = list_re.match(d)
