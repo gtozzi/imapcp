@@ -32,8 +32,9 @@ import pprint
 import email
 
 from optparse import OptionParser
+from imaputil import ImapUtil
 
-class main:
+class main(ImapUtil):
     
     NAME = 'imapcp'
     VERSION = '0.2'
@@ -78,20 +79,20 @@ class main:
         # Make connections and authenticate
         srcconn = imaplib.IMAP4(src['host'], src['port'])
         srcconn.login(src['user'], src['pass'])
-        srctype = self.__getServerType(srcconn)
+        srctype = self.getServerType(srcconn)
         print "Source server type is", srctype
         
         dstconn = imaplib.IMAP4(dst['host'], dst['port'])
         dstconn.login(dst['user'], dst['pass'])
-        dsttype = self.__getServerType(dstconn)
+        dsttype = self.getServerType(dstconn)
         print "Destination server type is", dsttype
 
         print "Source mailboxes:"
-        srcfolders = self.__listMailboxes(srcconn)
+        srcfolders = self.listMailboxes(srcconn)
         pp.pprint(srcfolders)
         
         print "Destination mailboxes:"
-        dstfolders = self.__listMailboxes(dstconn)
+        dstfolders = self.listMailboxes(dstconn)
         pp.pprint(dstfolders)
 
         # Syncing every source folder
@@ -99,7 +100,7 @@ class main:
             
             # Translate folder name
             srcfolder = f['mailbox']
-            dstfolder = self.__translateFolderName(f['mailbox'], srctype, dsttype)
+            dstfolder = self.translateFolderName(f['mailbox'], srctype, dsttype)
             
             # Check for folder in exclusion list
             skip = False
@@ -124,28 +125,28 @@ class main:
             dstconn.select(dstfolder, False)
             
             # Fetch all destination messages imap IDS
-            dstids = self.__listMessages(dstconn)
+            dstids = self.listMessages(dstconn)
             print "Found", len(dstids), "messages in destination folder"
             
             # Fetch destination messages ID
             print "Acquiring message IDs..."
             dstmexids = []
             for did in dstids:
-                dstmexids.append(self.__getMessageId(dstconn, did))
+                dstmexids.append(self.getMessageId(dstconn, did))
             print len(dstmexids), "message IDs acquired."
             
             # Fetch all source messages imap IDS
-            srcids = self.__listMessages(srcconn)
+            srcids = self.listMessages(srcconn)
             print "Found", len(srcids), "messages in source folder"
             
             # Sync data
             for sid in srcids:
                 # Get message id
-                mid = self.__getMessageId(srcconn, sid)
+                mid = self.getMessageId(srcconn, sid)
                 if not mid in dstmexids:
                     # Message not found, syncing it
                     print "Copying message", mid
-                    mex = self.__getMessage(srcconn, sid)
+                    mex = self.getMessage(srcconn, sid)
                     dstconn.append(dstfolder, None, None, mex)
                 else:
                     print "Skipping message", mid
@@ -153,93 +154,6 @@ class main:
         # Logout
         srcconn.logout()
         dstconn.logout()
-
-    def __listMailboxes(self, conn):
-        """
-            @param conn: Active IMAP connection
-            @return Returns a list of dict{ 'flags', 'delimiter', 'mailbox') }
-        """
-        (res, data) = conn.list()
-        if res != 'OK':
-            raise RuntimeError('Unvalid reply: ' + res)
-        list_re = re.compile(r'\((?P<flags>.*)\)\s+"(?P<delimiter>.*)"\s+"?(?P<name>[^"]*)"?')
-        folders = []
-        for d in data:
-            m = list_re.match(d)
-            if not m:
-                raise RuntimeError('No match: ' + d)
-            flags, delimiter, mailbox = m.groups()
-            folders.append({
-                'flags': flags,
-                'delimiter': delimiter,
-                'mailbox': mailbox,
-            })
-        return folders
-
-    def __listMessages(self, conn):
-        """
-            List all messages in the given conn and current mailbox.
-            
-            @returns a list of message imap identifiers
-        """
-        (res, data) = conn.search(None, 'ALL')
-        if res != 'OK':
-            raise RuntimeError('Unvalid reply: ' + res)
-        msgids = data[0].split()
-        return msgids
-
-    def __getMessageId(self, conn, imapid):
-        """
-            returns "Message-ID"
-        """
-        (res, data) = conn.fetch(imapid, '(BODY.PEEK[HEADER])')
-        if res != 'OK':
-            raise RuntimeError('Unvalid reply: ' + res)
-        headers = email.message_from_string(data[0][1])
-        return headers['Message-ID']
-
-    def __getMessage(self, conn, imapid):
-        """
-            returns full RFC822 message
-        """
-        (res, data) = conn.fetch(imapid, '(RFC822)')
-        if res != 'OK':
-            raise RuntimeError('Unvalid reply: ' + res)
-        return data[0][1]
-
-    def __getServerType(self, conn):
-        """ Try to guess IMAP server type
-        @return One of: unknown, exchange, dovecot
-        """
-        regs = {
-            'exchange': re.compile('^.*Microsoft Exchange.*$', re.I),
-            'dovecot': re.compile('^.*imapfront.*$', re.I),
-        }
-        for r in regs.keys():
-            if regs[r].match(conn.welcome):
-                return r
-        return 'unknown'
-
-    def __translateFolderName(self, name, srcformat, dstformat):
-        """ Translates forlder name from src server format do dst server format """
-        
-        # 1. Transpose into dovecot format (use DOT as folder separator)
-        if srcformat == 'exchange':
-            name = name.replace('.', ' ').replace('/', '.')
-        elif srcformat == 'dovecot':
-            pass
-        else:
-            pass
-        
-        # 2. Transpose into output format
-        if dstformat == 'exchange':
-            name = name.replace('/', ' ').replace('.', '/')
-        elif dstformat == 'dovecot':
-            pass
-        else:
-            pass
-        
-        return name
 
 if __name__ == '__main__':
     app = main()
