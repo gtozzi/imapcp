@@ -31,7 +31,7 @@ import email
 class ImapUtil:
     
     NAME = 'imaputil'
-    VERSION = '0.2'
+    VERSION = '0.3'
     
     def listMailboxes(self, conn):
         """
@@ -102,7 +102,8 @@ class ImapUtil:
         """
         regs = {
             'exchange': re.compile('^.*Microsoft Exchange.*$', re.I),
-            'dovecot': re.compile('^.*imapfront.*$', re.I),
+            'dovecot': re.compile('^.*(imapfront|dovecot).*$', re.I),
+            'courier': re.compile('^.*Courier.*$', re.I),
         }
         for r in regs.keys():
             if regs[r].match(conn.welcome):
@@ -112,9 +113,11 @@ class ImapUtil:
     def translateFolderName(self, name, srcformat, dstformat):
         """ Translates forlder name from src server format do dst server format """
         
-        # 1. Transpose into dovecot format (use DOT as folder separator)
+        # 1. Transpose into dovecot format (use DOT as folder separator), no INBOX. prefix
         if srcformat == 'exchange':
             name = name.replace('.', ' ').replace('/', '.')
+        elif srcformat == 'courier':
+            name = re.sub('^INBOX.', '', name, 1)
         elif srcformat == 'dovecot':
             pass
         else:
@@ -123,6 +126,8 @@ class ImapUtil:
         # 2. Transpose into output format
         if dstformat == 'exchange':
             name = name.replace('/', ' ').replace('.', '/')
+        elif dstformat == 'courier':
+            name = 'INBOX.' + name
         elif dstformat == 'dovecot':
             pass
         else:
