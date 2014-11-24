@@ -37,7 +37,7 @@ from imaputil import ImapUtil
 class main(ImapUtil):
     
     NAME = 'imapcp'
-    VERSION = '0.2'
+    VERSION = '0.3'
     
     def run(self):
         
@@ -49,6 +49,8 @@ class main(ImapUtil):
         parser = OptionParser(usage=usage, version=self.NAME + ' ' + self.VERSION)
         parser.add_option("-e", "--exclude", dest="exclude", action='append',
             help="Exclude folders matching pattern (can be specified multiple times)")
+        parser.add_option("-s", "--simulate", dest="simulate", action='store_true',
+            help="Do not perform any task")
 
         (options, args) = parser.parse_args()
         
@@ -77,12 +79,18 @@ class main(ImapUtil):
         }
         
         # Make connections and authenticate
-        srcconn = imaplib.IMAP4(src['host'], src['port'])
+        if src['port'] == 993:
+            srcconn = imaplib.IMAP4_SSL(src['host'], src['port'])
+        else:
+            srcconn = imaplib.IMAP4(src['host'], src['port'])
         srcconn.login(src['user'], src['pass'])
         srctype = self.getServerType(srcconn)
         print "Source server type is", srctype
         
-        dstconn = imaplib.IMAP4(dst['host'], dst['port'])
+        if dst['port'] == 993:
+            dstconn = imaplib.IMAP4_SSL(dst['host'], dst['port'])
+        else:
+            dstconn = imaplib.IMAP4(dst['host'], dst['port'])
         dstconn.login(dst['user'], dst['pass'])
         dsttype = self.getServerType(dstconn)
         print "Destination server type is", dsttype
@@ -146,14 +154,19 @@ class main(ImapUtil):
                 if not mid in dstmexids:
                     # Message not found, syncing it
                     print "Copying message", mid
-                    mex = self.getMessage(srcconn, sid)
-                    dstconn.append(dstfolder, None, None, mex)
+                    if not options.simulate:
+                        mex = self.getMessage(srcconn, sid)
+                        dstconn.append(dstfolder, None, None, mex)
                 else:
                     print "Skipping message", mid
 
         # Logout
         srcconn.logout()
         dstconn.logout()
+        
+        if options.simulate:
+            print "Simulated run, no action taken"
+
 
 if __name__ == '__main__':
     app = main()
