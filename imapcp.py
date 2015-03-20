@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+# kate: space-indent on; tab-indent off;
 
 """ @package docstring
 IMAP Copy
@@ -30,6 +31,7 @@ import sys
 import re
 import pprint
 import email
+import datetime
 
 from optparse import OptionParser
 from imaputil import ImapUtil
@@ -37,7 +39,7 @@ from imaputil import ImapUtil
 class main(ImapUtil):
     
     NAME = 'imapcp'
-    VERSION = '0.3'
+    VERSION = '0.4'
     
     def run(self):
         
@@ -49,8 +51,14 @@ class main(ImapUtil):
         parser = OptionParser(usage=usage, version=self.NAME + ' ' + self.VERSION)
         parser.add_option("-e", "--exclude", dest="exclude", action='append',
             help="Exclude folders matching pattern (can be specified multiple times)")
+        parser.add_option("-f", "--folder", dest="folder",
+            help="Only copy a single folder (use from:to to specify a different destinatin name)")
         parser.add_option("-s", "--simulate", dest="simulate", action='store_true',
             help="Do not perform any task")
+        parser.add_option("--from", dest="fr",
+            help="Only copy messages older than this date (inclusive)")
+        parser.add_option("--to", dest="to",
+            help="Only copy messages newer than this date (inclusive)")
 
         (options, args) = parser.parse_args()
         
@@ -59,6 +67,25 @@ class main(ImapUtil):
         if options.exclude:
             for e in options.exclude:
                 excludes.append(re.compile(e))
+
+        # Parse from/to dates
+        fr = None
+        if options.fr:
+            fr = datetime.date(*[int(i) for i in options.fr.split('-')])
+        if fr:
+            print "Only copying messages newer than %s (included)" % fr
+        to = None
+        if options.to:
+            to = datetime.date(*[int(i) for i in options.to.split('-')])
+        if to:
+            print "Only copying messages older than %s (included)" % to
+
+        # Parse single folder
+        folder = options.folder.split(':') if options.folder else None
+        if folder and len(folder) < 2:
+            folder.append(folder[0])
+        if folder:
+            print "Only copying folder %s to folder %s" % (folder[0], folder[1])
         
         # Parse mandatory arguments
         if len(args) < 2:
@@ -105,17 +132,23 @@ class main(ImapUtil):
 
         # Syncing every source folder
         for f in srcfolders:
-            
+
             # Translate folder name
             srcfolder = f['mailbox']
             dstfolder = self.translateFolderName(f['mailbox'], srctype, dsttype)
             
-            # Check for folder in exclusion list
+            # Check for folder in exclusion/inclusion list
             skip = False
-            for e in excludes:
-                if e.match(srcfolder):
+            if folder:
+                if folder[0] != srcfolder:
                     skip = True
-                    break
+                elif folder[1]:
+                    dstfolder = folder[1]
+            else:
+                for e in excludes:
+                    if e.match(srcfolder):
+                        skip = True
+                        break
             if skip:
                 print "Skipping", srcfolder, "(excluded)"
                 continue
@@ -149,6 +182,19 @@ class main(ImapUtil):
             
             # Sync data
             for sid in srcids:
+                # Check for date filter
+                if fr or to:
+                    h = self.getHeaders(srcconn, sid)
+                    if 'date' not in h:
+                        continue
+                    d = email.utils.parsedate(h['date'])
+                    if not d:
+                        continue
+                    date = datetime.date(d[0], d[1], d[2])
+                    if fr and date < fr:
+                        continue
+                    if to and date > to:
+                        continue
                 # Get message id
                 mid = self.getMessageId(srcconn, sid)
                 if not mid in dstmexids:
