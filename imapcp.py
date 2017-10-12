@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 # kate: space-indent on; tab-indent off;
 
 """ @package docstring
@@ -37,15 +36,15 @@ from optparse import OptionParser
 from imaputil import ImapUtil
 
 class main(ImapUtil):
-    
+
     NAME = 'imapcp'
-    VERSION = '0.4'
-    
+    VERSION = '0.5'
+
     def run(self):
-        
+
         # Init pretty printer
         pp = pprint.PrettyPrinter(indent = 2)
-        
+
         # Read command line
         usage = "%prog <user>:<password>:<host>:<port> <user>:<password>:<host>:<port>"
         parser = OptionParser(usage=usage, version=self.NAME + ' ' + self.VERSION)
@@ -61,7 +60,7 @@ class main(ImapUtil):
             help="Only copy messages newer than this date (inclusive)")
 
         (options, args) = parser.parse_args()
-        
+
         # Parse exclude list
         excludes = []
         if options.exclude:
@@ -73,20 +72,20 @@ class main(ImapUtil):
         if options.fr:
             fr = datetime.date(*[int(i) for i in options.fr.split('-')])
         if fr:
-            print "Only copying messages newer than %s (included)" % fr
+            print("Only copying messages newer than %s (included)" % fr)
         to = None
         if options.to:
             to = datetime.date(*[int(i) for i in options.to.split('-')])
         if to:
-            print "Only copying messages older than %s (included)" % to
+            print("Only copying messages older than %s (included)" % to)
 
         # Parse single folder
         folder = options.folder.split(':') if options.folder else None
         if folder and len(folder) < 2:
             folder.append(folder[0])
         if folder:
-            print "Only copying folder %s to folder %s" % (folder[0], folder[1])
-        
+            print("Only copying folder %s to folder %s" % (folder[0], folder[1]))
+
         # Parse mandatory arguments
         if len(args) < 2:
             parser.error("invalid number of arguments")
@@ -104,29 +103,29 @@ class main(ImapUtil):
             'host': dst[2] if len(dst) > 2 else 'localhost',
             'port': int(dst[3]) if len(dst) > 3 else 143,
         }
-        
+
         # Make connections and authenticate
         if src['port'] == 993:
             srcconn = imaplib.IMAP4_SSL(src['host'], src['port'])
         else:
             srcconn = imaplib.IMAP4(src['host'], src['port'])
         srcconn.login(src['user'], src['pass'])
-        srctype = self.getServerType(srcconn)
-        print "Source server type is", srctype
-        
+        srctype, srcdescr = self.getServerType(srcconn)
+        print("Source server type is", srcdescr)
+
         if dst['port'] == 993:
             dstconn = imaplib.IMAP4_SSL(dst['host'], dst['port'])
         else:
             dstconn = imaplib.IMAP4(dst['host'], dst['port'])
         dstconn.login(dst['user'], dst['pass'])
-        dsttype = self.getServerType(dstconn)
-        print "Destination server type is", dsttype
+        dsttype, dstdescr = self.getServerType(dstconn)
+        print("Destination server type is", dstdescr)
 
-        print "Source mailboxes:"
+        print("Source mailboxes:")
         srcfolders = self.listMailboxes(srcconn)
         pp.pprint(srcfolders)
-        
-        print "Destination mailboxes:"
+
+        print("Destination mailboxes:")
         dstfolders = self.listMailboxes(dstconn)
         pp.pprint(dstfolders)
 
@@ -136,7 +135,7 @@ class main(ImapUtil):
             # Translate folder name
             srcfolder = f['mailbox']
             dstfolder = self.translateFolderName(f['mailbox'], srctype, dsttype)
-            
+
             # Check for folder in exclusion/inclusion list
             skip = False
             if folder:
@@ -150,36 +149,36 @@ class main(ImapUtil):
                         skip = True
                         break
             if skip:
-                print "Skipping", srcfolder, "(excluded)"
+                print("Skipping", srcfolder, "(excluded)")
                 continue
-            
-            print "Syncing", srcfolder, 'into', dstfolder
-            
+
+            print("Syncing", srcfolder, 'into', dstfolder)
+
             # Create dst mailbox when missing
             dstconn.create(dstfolder)
-            
+
             # Select source mailbox readonly
             (res, data) = srcconn.select(srcfolder, True)
             if res == 'NO' and srctype == 'exchange' and 'special mailbox' in data[0]:
-                print "Skipping special Microsoft Exchange Mailbox", srcfolder
+                print("Skipping special Microsoft Exchange Mailbox", srcfolder)
                 continue
             dstconn.select(dstfolder, False)
-            
+
             # Fetch all destination messages imap IDS
             dstids = self.listMessages(dstconn)
-            print "Found", len(dstids), "messages in destination folder"
-            
+            print("Found", len(dstids), "messages in destination folder")
+
             # Fetch destination messages ID
-            print "Acquiring message IDs..."
+            print("Acquiring message IDs...")
             dstmexids = []
             for did in dstids:
                 dstmexids.append(self.getMessageId(dstconn, did))
-            print len(dstmexids), "message IDs acquired."
-            
+            print(len(dstmexids), "message IDs acquired.")
+
             # Fetch all source messages imap IDS
             srcids = self.listMessages(srcconn)
-            print "Found", len(srcids), "messages in source folder"
-            
+            print("Found", len(srcids), "messages in source folder")
+
             # Sync data
             for sid in srcids:
                 # Check for date filter
@@ -199,19 +198,19 @@ class main(ImapUtil):
                 mid = self.getMessageId(srcconn, sid)
                 if not mid in dstmexids:
                     # Message not found, syncing it
-                    print "Copying message", mid
+                    print("Copying message", mid)
                     if not options.simulate:
                         mex = self.getMessage(srcconn, sid)
                         dstconn.append(dstfolder, None, None, mex)
                 else:
-                    print "Skipping message", mid
+                    print("Skipping message", mid)
 
         # Logout
         srcconn.logout()
         dstconn.logout()
-        
+
         if options.simulate:
-            print "Simulated run, no action taken"
+            print("Simulated run, no action taken")
 
 
 if __name__ == '__main__':

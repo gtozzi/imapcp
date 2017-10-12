@@ -1,5 +1,5 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
+# kate: space-indent on; tab-indent off;
 
 """ @package docstring
 IMAP Util
@@ -29,10 +29,10 @@ import pprint
 import email
 
 class ImapUtil:
-    
+
     NAME = 'imaputil'
-    VERSION = '0.3'
-    
+    VERSION = '0.4'
+
     def listMailboxes(self, conn):
         """
             @param conn: Active IMAP connection
@@ -40,8 +40,8 @@ class ImapUtil:
         """
         (res, data) = conn.list()
         if res != 'OK':
-            raise RuntimeError('Unvalid reply: ' + res)
-        list_re = re.compile(r'\((?P<flags>.*)\)\s+"(?P<delimiter>.*)"\s+"?(?P<name>[^"]*)"?')
+            raise RuntimeError('Invalid reply: ' + res)
+        list_re = re.compile(rb'\((?P<flags>.*)\)\s+"(?P<delimiter>.*)"\s+"?(?P<name>[^"]*)"?')
         folders = []
         for d in data:
             m = list_re.match(d)
@@ -58,7 +58,7 @@ class ImapUtil:
     def listMessages(self, conn):
         """
             List all messages in the given conn and current mailbox.
-            
+
             @returns a list of message imap identifiers
         """
         (res, data) = conn.search(None, 'ALL')
@@ -74,7 +74,7 @@ class ImapUtil:
         (res, data) = conn.fetch(imapid, '(BODY.PEEK[HEADER])')
         if res != 'OK':
             raise RuntimeError('Unvalid reply: ' + res)
-        headers = email.message_from_string(data[0][1])
+        headers = email.message_from_bytes(data[0][1])
         return headers['Message-ID']
 
     def getMessage(self, conn, imapid):
@@ -85,7 +85,7 @@ class ImapUtil:
         if res != 'OK':
             raise RuntimeError('Unvalid reply: ' + res)
         return data[0][1]
-    
+
     def getHeaders(self, conn, imapid):
         """
             Returns message headers
@@ -98,39 +98,44 @@ class ImapUtil:
 
     def getServerType(self, conn):
         """ Try to guess IMAP server type
-        @return One of: unknown, exchange, dovecot
+        @return tuple (type, descr) Type is one of: unknown, exchange, dovecot
         """
         regs = {
-            'exchange': re.compile('^.*Microsoft Exchange.*$', re.I),
-            'dovecot': re.compile('^.*(imapfront|dovecot).*$', re.I),
-            'courier': re.compile('^.*Courier.*$', re.I),
+            'exchange': re.compile(b'^.*Microsoft Exchange.*$', re.I),
+            'dovecot': re.compile(b'^.*(imapfront|dovecot).*$', re.I),
+            'courier': re.compile(b'^.*Courier.*$', re.I),
+        }
+        descr = {
+            'exchange': 'MS Exchange',
+            'dovecot': 'Dovecot',
+            'courier': 'Courier',
         }
         for r in regs.keys():
             if regs[r].match(conn.welcome):
-                return r
-        return 'unknown'
+                return ( r, descr[r] )
+        return ( 'unknown', 'Unknown ({})'.format(conn.welcome.decode()) )
 
     def translateFolderName(self, name, srcformat, dstformat):
         """ Translates forlder name from src server format do dst server format """
-        
+
         # 1. Transpose into dovecot format (use DOT as folder separator), no INBOX. prefix
         if srcformat == 'exchange':
-            name = name.replace('.', ' ').replace('/', '.')
+            name = name.replace(b'.', b' ').replace(b'/', b'.')
         elif srcformat == 'courier':
-            name = re.sub('^INBOX.', '', name, 1)
+            name = re.sub(b'^INBOX.', '', name, 1)
         elif srcformat == 'dovecot':
             pass
         else:
             pass
-        
+
         # 2. Transpose into output format
         if dstformat == 'exchange':
-            name = name.replace('/', ' ').replace('.', '/')
+            name = name.replace(b'/', b' ').replace(b'.', b'/')
         elif dstformat == 'courier':
-            name = 'INBOX.' + name
+            name = b'INBOX.' + name
         elif dstformat == 'dovecot':
             pass
         else:
             pass
-        
+
         return name
