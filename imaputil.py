@@ -64,14 +64,27 @@ class MailFolder:
 
         if srvtype == ImapUtil.TYPE_EXCHANGE:
             # Use slash
-            return b'/'.join(path)
+            hs = b'/'
+            path = hs.join(path)
         else:
             # Use dot
-            path = b'.'.join(path)
+            hs = b'.'
+            path = hs.join(path)
             if srvtype == ImapUtil.TYPE_COURIER and path != b'INBOX':
                 # Append INBOX.
                 path = b'INBOX.' + path
-            return path
+            elif srvtype == ImapUtil.TYPE_DOVECOT:
+                # Remove slashes
+                path = path.replace(b'/', b'-')
+
+        # Sanitize name ending with hierarchy separator
+        while True:
+            if path.endswith(hs):
+                path = path[:-1]
+            else:
+                break
+
+        return path
 
     def __bytes__(self):
         return self.name

@@ -173,6 +173,7 @@ class main(ImapUtil):
             if res == 'OK':
                 pass
             elif res == 'NO':
+                print('Error selecting folder: {}, trying to create it'.format(str(data)))
                 # Create and try again
                 res, data = dstconn.create(dstfolder)
                 if res != 'OK':
