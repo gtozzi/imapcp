@@ -54,6 +54,8 @@ class main(ImapUtil):
             help="Only copy a single folder (use from:to to specify a different destinatin name)")
         parser.add_option("-s", "--simulate", dest="simulate", action='store_true',
             help="Do not perform any task")
+        parser.add_option("-t", "--trim", dest="trim", action='store_true',
+            help="Trim folder names")
         parser.add_option("-k", "--skel", dest="skel", action='store_true',
             help="Only copy folder structure")
         parser.add_option("--from", dest="fr",
@@ -138,7 +140,7 @@ class main(ImapUtil):
 
             # Translate folder name
             srcfolder = f.name
-            dstfolder = f.getPathBytes(dsttype)
+            dstfolder = f.getPathBytes(dsttype, trim=options.trim)
 
             # Check for folder in exclusion/inclusion list
             skip = False
@@ -162,11 +164,23 @@ class main(ImapUtil):
             dstconn.create(dstfolder)
 
             # Select source mailbox readonly
-            (res, data) = srcconn.select(srcfolder, True)
+            res, data = srcconn.select(srcfolder, True)
             if res == 'NO' and srctype == 'exchange' and 'special mailbox' in data[0]:
                 print("Skipping special Microsoft Exchange Mailbox", srcfolder)
                 continue
-            dstconn.select(dstfolder, False)
+            assert res == 'OK', (res, data)
+            res, data = dstconn.select(dstfolder, False)
+            if res == 'OK':
+                pass
+            elif res == 'NO':
+                # Create and try again
+                res, data = dstconn.create(dstfolder)
+                if res != 'OK':
+                    raise RuntimeError('Error creating mailbox "{}": {}'.format(dstfolder.decode(), str(data)))
+                res, data = dstconn.select(dstfolder, False)
+                assert res == 'OK', (res, data)
+            else:
+                assert False, (res, data)
 
             # Stop here if only copying skeleton
             if options.skel:

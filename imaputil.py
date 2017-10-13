@@ -51,19 +51,23 @@ class MailFolder:
                 path = path[1:]
         return tuple(path)
 
-    def getPathBytes(self, srvtype=None):
+    def getPathBytes(self, srvtype=None, trim=False):
         """
             @return path translated for given server type
         """
         if srvtype is None:
             srvtype = self.srvtype
 
+        path = self.getPath()
+        if trim:
+            path = map(lambda i: i.strip(), path)
+
         if srvtype == ImapUtil.TYPE_EXCHANGE:
             # Use slash
-            return b'/'.join(self.getPath())
+            return b'/'.join(path)
         else:
             # Use dot
-            path = b'.'.join(self.getPath())
+            path = b'.'.join(path)
             if srvtype == ImapUtil.TYPE_COURIER and path != b'INBOX':
                 # Append INBOX.
                 path = b'INBOX.' + path
