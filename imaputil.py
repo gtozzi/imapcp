@@ -28,16 +28,70 @@ import re
 import pprint
 import email
 
+
+class MailFolder:
+    """ A Mail Folder representation """
+
+    def __init__(self, srvtype, flags, delimiter, name):
+        self.srvtype = srvtype
+        self.delimiter = delimiter
+        self.flags = flags
+        self.name = name
+
+    def getPath(self):
+        """
+            @return tuple: standardized path as a tuple
+        """
+        path = self.name.split(self.delimiter)
+        if self.srvtype == ImapUtil.TYPE_COURIER:
+            # Remove trailing inbox
+            if path[0] != b'INBOX':
+                raise ValueError('Courier path must start with inbox: {}'.format(path[0]))
+            if len(path) > 1:
+                path = path[1:]
+        return tuple(path)
+
+    def getPathBytes(self, srvtype=None):
+        """
+            @return path translated for given server type
+        """
+        if srvtype is None:
+            srvtype = self.srvtype
+
+        if srvtype == ImapUtil.TYPE_EXCHANGE:
+            # Use slash
+            return b'/'.join(self.getPath())
+        else:
+            # Use dot
+            path = b'.'.join(self.getPath())
+            if srvtype == ImapUtil.TYPE_COURIER and path != b'INBOX':
+                # Append INBOX.
+                path = b'INBOX.' + path
+            return path
+
+    def __bytes__(self):
+        return self.name
+
+    def __repr__(self):
+        return str(self.getPath())
+
+
 class ImapUtil:
 
     NAME = 'imaputil'
     VERSION = '0.4'
 
+    TYPE_EXCHANGE = 'exchange'
+    TYPE_DOVECOT = 'dovecot'
+    TYPE_COURIER = 'courier'
+    TYPE_UNKNOWN = 'unknown'
+
     def listMailboxes(self, conn):
         """
             @param conn: Active IMAP connection
-            @return Returns a list of dict{ 'flags', 'delimiter', 'mailbox') }
+            @return Returns a list of Mailbox objects
         """
+        srvtype, srvdescr = self.getServerType(conn)
         (res, data) = conn.list()
         if res != 'OK':
             raise RuntimeError('Invalid reply: ' + res)
@@ -47,12 +101,8 @@ class ImapUtil:
             m = list_re.match(d)
             if not m:
                 raise RuntimeError('No match: ' + d)
-            flags, delimiter, mailbox = m.groups()
-            folders.append({
-                'flags': flags,
-                'delimiter': delimiter,
-                'mailbox': mailbox,
-            })
+            flags, delimiter, name = m.groups()
+            folders.append(MailFolder(srvtype, flags, delimiter, name))
         return folders
 
     def listMessages(self, conn):
@@ -101,22 +151,22 @@ class ImapUtil:
         @return tuple (type, descr) Type is one of: unknown, exchange, dovecot
         """
         regs = {
-            'exchange': re.compile(b'^.*Microsoft Exchange.*$', re.I),
-            'dovecot': re.compile(b'^.*(imapfront|dovecot).*$', re.I),
-            'courier': re.compile(b'^.*Courier.*$', re.I),
+            self.TYPE_EXCHANGE: re.compile(b'^.*Microsoft Exchange.*$', re.I),
+            self.TYPE_DOVECOT: re.compile(b'^.*(imapfront|dovecot).*$', re.I),
+            self.TYPE_COURIER: re.compile(b'^.*Courier.*$', re.I),
         }
         descr = {
-            'exchange': 'MS Exchange',
-            'dovecot': 'Dovecot',
-            'courier': 'Courier',
+            self.TYPE_EXCHANGE: 'MS Exchange',
+            self.TYPE_DOVECOT: 'Dovecot',
+            self.TYPE_COURIER: 'Courier',
         }
         for r in regs.keys():
             if regs[r].match(conn.welcome):
                 return ( r, descr[r] )
-        return ( 'unknown', 'Unknown ({})'.format(conn.welcome.decode()) )
+        return ( self.TYPE_UNKNOWN, 'Unknown ({})'.format(conn.welcome.decode()) )
 
-    def translateFolderName(self, name, srcformat, dstformat):
-        """ Translates forlder name from src server format do dst server format """
+    def translateFolderName(self, folder, srcformat, dstformat):
+        """ Translates folder name from src server format do dst server format """
 
         # 1. Transpose into dovecot format (use DOT as folder separator), no INBOX. prefix
         if srcformat == 'exchange':

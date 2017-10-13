@@ -54,6 +54,8 @@ class main(ImapUtil):
             help="Only copy a single folder (use from:to to specify a different destinatin name)")
         parser.add_option("-s", "--simulate", dest="simulate", action='store_true',
             help="Do not perform any task")
+        parser.add_option("-k", "--skel", dest="skel", action='store_true',
+            help="Only copy folder structure")
         parser.add_option("--from", dest="fr",
             help="Only copy messages older than this date (inclusive)")
         parser.add_option("--to", dest="to",
@@ -65,7 +67,7 @@ class main(ImapUtil):
         excludes = []
         if options.exclude:
             for e in options.exclude:
-                excludes.append(re.compile(e))
+                excludes.append(re.compile(e.encode()))
 
         # Parse from/to dates
         fr = None
@@ -121,20 +123,22 @@ class main(ImapUtil):
         dsttype, dstdescr = self.getServerType(dstconn)
         print("Destination server type is", dstdescr)
 
-        print("Source mailboxes:")
+        print("Source folders:")
         srcfolders = self.listMailboxes(srcconn)
-        pp.pprint(srcfolders)
+        for f in srcfolders:
+             print(f)
 
-        print("Destination mailboxes:")
+        print("Destination folders:")
         dstfolders = self.listMailboxes(dstconn)
-        pp.pprint(dstfolders)
+        for f in dstfolders:
+            print(f)
 
         # Syncing every source folder
         for f in srcfolders:
 
             # Translate folder name
-            srcfolder = f['mailbox']
-            dstfolder = self.translateFolderName(f['mailbox'], srctype, dsttype)
+            srcfolder = f.name
+            dstfolder = f.getPathBytes(dsttype)
 
             # Check for folder in exclusion/inclusion list
             skip = False
@@ -164,14 +168,21 @@ class main(ImapUtil):
                 continue
             dstconn.select(dstfolder, False)
 
+            # Stop here if only copying skeleton
+            if options.skel:
+                print("Skipping message copy")
+                continue
+
             # Fetch all destination messages imap IDS
             dstids = self.listMessages(dstconn)
             print("Found", len(dstids), "messages in destination folder")
 
             # Fetch destination messages ID
-            print("Acquiring message IDs...")
+            print("Acquiring destination message IDs...", end='', flush=True)
             dstmexids = []
-            for did in dstids:
+            for idx, did in enumerate(dstids):
+                if idx % 100 == 0:
+                    print('.', end='', flush=True)
                 dstmexids.append(self.getMessageId(dstconn, did))
             print(len(dstmexids), "message IDs acquired.")
 
