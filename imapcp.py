@@ -145,13 +145,13 @@ class main(ImapUtil):
             # Check for folder in exclusion/inclusion list
             skip = False
             if folder:
-                if folder[0] != srcfolder:
+                if bytes(folder[0], "ascii") != srcfolder:
                     skip = True
                 elif folder[1]:
                     dstfolder = folder[1]
             else:
                 for e in excludes:
-                    if e.match(srcfolder):
+                    if e.match(str(srcfolder)):
                         skip = True
                         break
             if skip:
