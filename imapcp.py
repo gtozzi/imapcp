@@ -62,14 +62,23 @@ class main(ImapUtil):
             help="Only copy messages older than this date (inclusive)")
         parser.add_option("--to", dest="to",
             help="Only copy messages newer than this date (inclusive)")
+        parser.add_option("--ignore", dest="ignore", action="append",
+            help="Ignore given message id (without '<>', may be specified multiple times")
 
         (options, args) = parser.parse_args()
+
+        # Parse ignore list
+        ignores = []
+        if options.ignore:
+            for ignore in options.ignore:
+                ignores.append('<' + ignore + '>')
+            print("Ignoring %s" % ignores)
 
         # Parse exclude list
         excludes = []
         if options.exclude:
             for e in options.exclude:
-                excludes.append(re.compile(e.encode()))
+                excludes.append(re.compile(e.encode('ascii')))
 
         # Parse from/to dates
         fr = None
@@ -88,6 +97,8 @@ class main(ImapUtil):
         if folder and len(folder) < 2:
             folder.append(folder[0])
         if folder:
+            folder[0] = folder[0].encode()
+            folder[1] = folder[1].encode()
             print("Only copying folder %s to folder %s" % (folder[0], folder[1]))
 
         # Parse mandatory arguments
@@ -145,13 +156,13 @@ class main(ImapUtil):
             # Check for folder in exclusion/inclusion list
             skip = False
             if folder:
-                if bytes(folder[0], "ascii") != srcfolder:
+                if folder[0] != srcfolder:
                     skip = True
                 elif folder[1]:
                     dstfolder = folder[1]
             else:
                 for e in excludes:
-                    if e.match(str(srcfolder)):
+                    if e.match(srcfolder):
                         skip = True
                         break
             if skip:
@@ -222,7 +233,9 @@ class main(ImapUtil):
                         continue
                 # Get message id
                 mid = self.getMessageId(srcconn, sid)
-                if not mid in dstmexids:
+                if mid in ignores:
+                    print("Ignoring message", mid)
+                elif not mid in dstmexids:
                     # Message not found, syncing it
                     print("Copying message", mid)
                     if not options.simulate:
