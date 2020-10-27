@@ -103,6 +103,9 @@ class ImapUtil:
     TYPE_COURIER = 'courier'
     TYPE_UNKNOWN = 'unknown'
 
+    ATOM_SPECIALS = [ i.to_bytes(1, 'big') for i in range(0, 0x20) ] + \
+        [ b'(', b')', b'{', b' ', b'%', b'*', b'"', b'\\', b']' ]
+
     def listMailboxes(self, conn):
         """
             @param conn: Active IMAP connection
@@ -206,3 +209,29 @@ class ImapUtil:
             pass
 
         return name
+
+    def quoteFolderName(self, folder, alwaysQuote=False):
+        """ Returns a quoted version of given folder if needed """
+
+        if type(folder) != bytes:
+            raise ValueError('Folder name must be bytes')
+
+        # All chars must be 0-127, excluding CR and LF
+        mustQuote = False
+        for char in folder:
+            if char <= 0x00 or char == 0x10 or char == 0x13 or char > 0x7f:
+                raise ValueError('Folder name must not contain invalid chars, found "{}" ({})'.format(chr(char), ichar))
+
+            if char.to_bytes(1, 'big') in self.ATOM_SPECIALS:
+                mustQuote = True
+
+        if b'"' in folder:
+            # Looks like escaping is not even supported by the protocol?
+            # Should probably use the literal form instead, see
+            # https://tools.ietf.org/html/rfc3501#section-4.3
+            raise NotImplementedError('Escaping is not supported')
+
+        if alwaysQuote or mustQuote:
+            return rb'"%s"' % folder
+
+        return folder

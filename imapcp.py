@@ -46,7 +46,7 @@ class main(ImapUtil):
         pp = pprint.PrettyPrinter(indent = 2)
 
         # Read command line
-        usage = "%prog <user>:<password>:<host>:<port> <user>:<password>:<host>:<port>"
+        usage = "%prog <suser>:<spassword>:<shost>:<sport> <duser>:<dpassword>:<dhost>:<dport>"
         parser = OptionParser(usage=usage, version=self.NAME + ' ' + self.VERSION)
         parser.add_option("-e", "--exclude", dest="exclude", action='append',
             help="Exclude folders matching pattern (can be specified multiple times)")
@@ -161,24 +161,24 @@ class main(ImapUtil):
             print("Syncing", srcfolder, 'into', dstfolder)
 
             # Create dst mailbox when missing
-            dstconn.create(dstfolder)
+            dstconn.create(self.quoteFolderName(dstfolder))
 
             # Select source mailbox readonly
-            res, data = srcconn.select(srcfolder, True)
+            res, data = srcconn.select(self.quoteFolderName(srcfolder), True)
             if res == 'NO' and srctype == 'exchange' and 'special mailbox' in data[0]:
                 print("Skipping special Microsoft Exchange Mailbox", srcfolder)
                 continue
             assert res == 'OK', (res, data)
-            res, data = dstconn.select(dstfolder, False)
+            res, data = dstconn.select(self.quoteFolderName(dstfolder), False)
             if res == 'OK':
                 pass
             elif res == 'NO':
                 print('Error selecting folder: {}, trying to create it'.format(str(data)))
                 # Create and try again
-                res, data = dstconn.create(dstfolder)
+                res, data = dstconn.create(self.quoteFolderName(dstfolder))
                 if res != 'OK':
-                    raise RuntimeError('Error creating mailbox "{}": {}'.format(dstfolder.decode(), str(data)))
-                res, data = dstconn.select(dstfolder, False)
+                    raise RuntimeError('Error creating mailboxr "{}": {}'.format(dstfolder.decode(), str(data)))
+                res, data = dstconn.select(self.quoteFolderName(dstfolder), False)
                 assert res == 'OK', (res, data)
             else:
                 assert False, (res, data)
